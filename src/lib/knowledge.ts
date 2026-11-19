@@ -80,7 +80,7 @@ export async function lookupPrice(query: string, payer?: string): Promise<PriceH
     join chatbot.documents d on d.id = p.document_id
     cross join lateral (
       select count(*) as hits from unnest(${tokens}::text[]) w
-      where p.description ilike '%' || w || '%' or p.sku = w
+      where p.description ilike '%' || w || '%' or p.notes ilike '%' || w || '%' or p.sku = w
     ) m
     where m.hits > 0
       and (${payerFilter}::text is null or d.payer ilike ${payerFilter} or d.title ilike ${payerFilter})

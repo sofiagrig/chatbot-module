@@ -69,3 +69,43 @@ test("prices that include VAT are split back", () => {
   assert.equal(result.totalBeforeVat, 100);
   assert.equal(result.vat, 18);
 });
+
+test("sheet without a header row (like the specialist basket file)", () => {
+  const result = parsePriceMatrix([
+    ["בדיקות", "במ", "הערכה / בדיקה תקופתית של מטופל מוכר ממוקדת בבעיה לפי דווח", 113.2],
+    ["שיננית", "נא", "הטריה והסרה של פלאק ואבנית בכל הפה שיננית", 150.8],
+    ["משמרת", "ע", "עקירה, שן שבקעה או שורש חשוף, שן אחת", 211.7],
+    ["פריו", "המי", "המיסקציה", 557.7],
+    ["פריו", "הכ", "הארכת כותרת", 775],
+    ["משמרת", "עכ", "עקירה כירורגית - שן כלואה חלקית/מלא ושבקעה לחלל הפה", 1026.6],
+    ["פרותטיקה", "כזרק", "כתר זירקוניה", 2328.3],
+  ]);
+  assert.equal(result.noHeader, false);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.rows.length, 7);
+  assert.deepEqual(result.rows[6], { sku: "כזרק", description: "כתר זירקוניה", price: 2328.3, notes: "פרותטיקה" });
+});
+
+test("header whose price column is named after the list (like the regular basket file)", () => {
+  const result = parsePriceMatrix([
+    ["קבוצה", "קוד", "תאור", "סל טיפולי שיניים- רגיל"],
+    ["בדיקות", "ב", "בדיקה והערכה ראשונית מפורטת ונרחבת של הפה", 64],
+    ["פרותטיקה", "כח", "כתר חרסינה מאוחה למתכת לא אצילה", 1282.6],
+    ["יישור שיניים", "קיבוע", "קיבוע אורתודונטי לאחר הסרת מכשור", 769.8000000000001],
+  ]);
+  assert.equal(result.noHeader, false);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.rows[1], { sku: "כח", description: "כתר חרסינה מאוחה למתכת לא אצילה", price: 1282.6, notes: "פרותטיקה" });
+  assert.equal(result.rows[2].price, 769.8);
+});
+
+test("porcelain crown 1,282.6 including VAT splits into net + VAT", () => {
+  const result = calculateTotal(
+    [{ sku: "כח", description: "כתר חרסינה", priceList: "רגיל", unitPrice: 1282.6, vatIncluded: true, quantity: 1 }],
+    0.18,
+  );
+  assert.equal(result.totalBeforeVat, 1086.95);
+  assert.equal(result.vat, 195.65);
+  assert.equal(result.total, 1282.6);
+  assert.equal(result.lines[0].lineTotalBeforeVat, 1086.95);
+});
