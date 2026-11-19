@@ -48,8 +48,8 @@ function findHeader(matrix: unknown[][]): { index: number; cols: Partial<Record<
 
 /**
  * Fills in columns the header did not name (or all of them, when there is no header) from the
- * data itself: the price is the right-most column that is almost always a number; the
- * description is the text column with the longest values; the code is the short text column
+ * data itself: the description is the text column with the longest values; the price is the
+ * first column after it that is almost always a number; the code is the short text column
  * whose values are (almost) all different; a short text column that repeats is the group.
  */
 function inferColumns(rows: unknown[][], known: Partial<Record<Column, number>>): Partial<Record<Column, number>> {
@@ -69,14 +69,18 @@ function inferColumns(rows: unknown[][], known: Partial<Record<Column, number>>)
       unique: values.length ? new Set(values).size / values.length : 0,
     };
   });
-  if (cols.price === undefined) {
-    const candidates = stats.filter((s) => !taken().has(s.c) && s.filled >= 0.8 && s.numeric >= 0.9);
-    if (candidates.length) cols.price = candidates[candidates.length - 1].c;
-  }
   const text = () => stats.filter((s) => !taken().has(s.c) && s.filled >= 0.8 && s.numeric < 0.5);
   if (cols.description === undefined) {
     const longest = [...text()].sort((a, b) => b.avgLength - a.avgLength)[0];
     if (longest) cols.description = longest.c;
+  }
+  if (cols.price === undefined) {
+    // The list price is the first numeric column after the description. Columns further right
+    // are usually derived (discount rate, price after discount) and must not be taken instead.
+    const numeric = stats.filter((s) => !taken().has(s.c) && s.filled >= 0.8 && s.numeric >= 0.9);
+    const afterDescription = numeric.filter((s) => cols.description === undefined || s.c > cols.description);
+    const pick = afterDescription[0] ?? numeric[numeric.length - 1];
+    if (pick) cols.price = pick.c;
   }
   if (cols.sku === undefined) {
     const codes = text()

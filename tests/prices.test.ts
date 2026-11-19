@@ -109,3 +109,19 @@ test("porcelain crown 1,282.6 including VAT splits into net + VAT", () => {
   assert.equal(result.total, 1282.6);
   assert.equal(result.lines[0].lineTotalBeforeVat, 1086.95);
 });
+
+test("clinic price list with discount columns takes the list price, not the discount", () => {
+  const result = parsePriceMatrix([
+    ["קבוצה", "קוד", "תאור", "מחירון 1.2025", "הגדרת רף הנחה מקסימלי", "מחירון לאחר הנחה"],
+    ["בדיקות", "ב", "בדיקה והערכה ראשונית מפורטת ונרחבת של הפה", "170", "1", "0"],
+    ["בדיקות", "במ", "בדיקת ראשונית רופא שיניים מומחה (אורתו / פריו / כירורג / אחר)", "490", "0.2", "392"],
+    ["משמרת", "עבמ", "עקירת שן כירורגית / בינה מומחה", "2150", "0.15", "1827.5"],
+    ["כשל", "כששתל", "שתל נדחה", "0", "0", "0"],
+  ]);
+  assert.equal(result.noHeader, false);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(
+    result.rows.map((r) => [r.sku, r.price]),
+    [["ב", 170], ["במ", 490], ["עבמ", 2150], ["כששתל", 0]],
+  );
+});
