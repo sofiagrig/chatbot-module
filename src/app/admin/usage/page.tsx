@@ -1,12 +1,14 @@
 import { AppShell, NoAccess } from "@/components/AppShell";
 import { t } from "@/i18n";
 import { getUser } from "@/lib/auth";
+import { ReviewItem } from "@/components/admin/ReviewItem";
 import { db } from "@/lib/db";
+import { listTopics } from "@/lib/knowledge";
 
 // Claude Sonnet 5.5 list prices, USD per million tokens (cache writes at 1.25x input).
 const PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };
 
-type Row = { question: string; answer: string; email: string; created_at: Date };
+type Row = { id: string; question: string; answer: string; email: string; created_at: Date };
 
 export default async function UsagePage() {
   const user = await getUser();
@@ -31,7 +33,7 @@ export default async function UsagePage() {
 
   // Each answer with the question just before it in the same conversation.
   const pairs = (kind: "negative" | "unanswered") => sql<Row[]>`
-    select q.content as question, a.content as answer, c.email, a.created_at
+    select a.id, q.content as question, a.content as answer, c.email, a.created_at
     from chatbot.messages a
     join chatbot.conversations c on c.id = a.conversation_id
     cross join lateral (
@@ -39,10 +41,11 @@ export default async function UsagePage() {
       where u.conversation_id = a.conversation_id and u.role = 'user' and u.created_at <= a.created_at
       order by u.created_at desc limit 1
     ) q
-    where a.role = 'assistant'
+    where a.role = 'assistant' and a.resolved_at is null
       and (case when ${kind} = 'negative' then a.feedback = -1 else a.no_answer end)
     order by a.created_at desc limit 50`;
-  const [negative, unanswered] = await Promise.all([pairs("negative"), pairs("unanswered")]);
+  const [negative, unanswered, topics] = await Promise.all([pairs("negative"), pairs("unanswered"), listTopics()]);
+  const topicNames = topics.map((x) => x.name);
 
   const cost =
     (stats.input * PRICE.input + stats.output * PRICE.output + stats.cache_read * PRICE.cacheRead + stats.cache_write * PRICE.cacheWrite) /
@@ -71,25 +74,27 @@ export default async function UsagePage() {
         ))}
       </div>
       <p className="mt-2 text-xs text-muted">{t("usage.costNote")}</p>
-      <PairList title={t("usage.negative")} rows={negative} />
-      <PairList title={t("usage.unanswered")} rows={unanswered} />
+      <p className="mt-8 text-sm text-muted">{t("corrections.intro")}</p>
+      <PairList title={t("usage.negative")} rows={negative} topics={topicNames} />
+      <PairList title={t("usage.unanswered")} rows={unanswered} topics={topicNames} />
     </AppShell>
   );
 }
 
-function PairList({ title, rows }: { title: string; rows: Row[] }) {
+function PairList({ title, rows, topics }: { title: string; rows: Row[]; topics: string[] }) {
   return (
-    <section className="mt-8 flex flex-col gap-3">
+    <section className="mt-6 flex flex-col gap-3">
       <h2 className="text-lg font-bold">{title}</h2>
       {rows.length === 0 && <p className="text-muted">{t("usage.noneYet")}</p>}
-      {rows.map((r, i) => (
-        <article key={i} className="flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-sm">
-          <div className="text-muted">
-            <span dir="ltr">{r.email}</span> · {r.created_at.toLocaleString("he-IL")}
-          </div>
-          <p className="font-medium">{r.question}</p>
-          <p className="whitespace-pre-wrap text-muted">{r.answer}</p>
-        </article>
+      {rows.map((r) => (
+        <ReviewItem
+          key={r.id}
+          messageId={r.id}
+          question={r.question}
+          answer={r.answer}
+          meta={`${r.email} · ${r.created_at.toLocaleString("he-IL")}`}
+          topics={topics}
+        />
       ))}
     </section>
   );

@@ -16,6 +16,7 @@ import {
 } from "@/lib/files";
 import type { ParseResult, PriceRow } from "@/lib/prices";
 import { detectIdentifiers, type PrivacyReason } from "@/lib/privacy";
+import { t } from "@/i18n";
 import { describeError } from "@/lib/errors";
 
 type Purpose = "procedure" | "price_list";
@@ -244,4 +245,61 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
   });
   revalidatePath("/admin/documents");
   return ok;
+}
+
+// Corrections ---------------------------------------------------------------------------
+// The admin corrects an answer marked "not helpful" (or left unanswered): the question and the
+// right answer become a Q&A document the bot reads from then on, and the answer leaves the
+// review list.
+
+export type CorrectionResult =
+  | { ok: true }
+  | { ok: false; error: "missingFields" | "failed" }
+  | { ok: false; error: "pii"; reasons: PrivacyReason[] };
+
+export async function saveCorrection(input: {
+  messageId: string;
+  topic: string;
+  question: string;
+  answer: string;
+}): Promise<CorrectionResult> {
+  const user = await requireAdmin();
+  const topic = cleanName(input.topic, 80);
+  const question = input.question.trim().slice(0, 2000);
+  const answer = input.answer.trim().slice(0, 10000);
+  if (!topic || !question || !answer) return { ok: false, error: "missingFields" };
+  const reasons = detectIdentifiers(`${question}\n${answer}`);
+  if (reasons.length) return { ok: false, error: "pii", reasons };
+  const content = `${t("corrections.questionLabel")}: ${question}\n\n${t("corrections.answerLabel")}: ${answer}`;
+  try {
+    await db().begin(async (tx) => {
+      const topicRow = await topicId(tx, topic);
+      const [doc] = await tx<{ id: string }[]>`
+        insert into chatbot.documents (topic_id, kind, title, content, uploaded_by)
+        values (${topicRow}, 'qa', ${cleanName(question, 200)}, ${content}, ${user.email})
+        returning id`;
+      const updated = await tx`
+        update chatbot.messages set resolved_at = now(), resolved_document_id = ${doc.id}
+        where id = ${input.messageId} and role = 'assistant'
+        returning id`;
+      if (updated.length !== 1) throw new Error("answer not found");
+    });
+  } catch (error) {
+    console.error(`save correction failed: ${describeError(error)}`);
+    return { ok: false, error: "failed" };
+  }
+  revalidatePath("/admin/usage");
+  revalidatePath("/admin/documents");
+  return { ok: true };
+}
+
+/** Removes an answer from the review list without adding anything to the knowledge base. */
+export async function dismissReview(messageId: string): Promise<boolean> {
+  await requireAdmin();
+  const rows = await db()`
+    update chatbot.messages set resolved_at = now()
+    where id = ${messageId} and role = 'assistant' and resolved_at is null
+    returning id`;
+  revalidatePath("/admin/usage");
+  return rows.length === 1;
 }
