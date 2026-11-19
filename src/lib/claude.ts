@@ -45,10 +45,12 @@ Rules:
    give the price after it by calling calculate with discount_rate = max_discount (same three lines).
 4. Totals for several items or quantities: calculate with all the lines; show each line (quantity x unit
    price = line total), then the same three lines for the whole. Never add, multiply or compute VAT yourself.
-5. If the question is ambiguous, ask one short clarifying question instead of guessing.
-6. Write in Hebrew, short and practical. Use a numbered list for steps. Quote emails, SKUs and form
+5. Documents with kind="qa" are questions answered and approved by the network's admin. When one matches
+   the question, answer from it (it takes precedence over a procedure that says otherwise).
+6. If the question is ambiguous, ask one short clarifying question instead of guessing.
+7. Write in Hebrew, short and practical. Use a numbered list for steps. Quote emails, SKUs and form
    names exactly as written in the documents.
-7. Answers based on documents or price lists end with the marker [[sources: <document ids>]], listing the
+8. Answers based on documents or price lists end with the marker [[sources: <document ids>]], listing the
    id of every document or price list you used (ids are given below and in tool results).
    Do not mention document ids anywhere else in the text.`;
 
@@ -58,7 +60,7 @@ async function systemPrompt(): Promise<TextBlockParam[]> {
   const docs = texts
     .map(
       (d) =>
-        `<document id="${d.id}" title="${escapeAttr(d.title)}" topic="${escapeAttr(d.topic)}" updated="${d.updated_at.toISOString().slice(0, 10)}">\n${d.content}\n</document>`,
+        `<document id="${d.id}" kind="${d.kind}" title="${escapeAttr(d.title)}" topic="${escapeAttr(d.topic)}" updated="${d.updated_at.toISOString().slice(0, 10)}">\n${d.content}\n</document>`,
     )
     .join("\n\n");
   const lists = priceLists.length

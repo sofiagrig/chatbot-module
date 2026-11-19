@@ -100,6 +100,7 @@ export function DocumentsManager({ documents, topics }: { documents: DocumentIte
                   <td className="hidden px-4 py-3 sm:table-cell" dir="ltr">{d.uploadedBy}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-end gap-2 whitespace-nowrap sm:flex-row sm:justify-end">
+                      {d.kind !== "qa" && (
                       <button
                         type="button"
                         disabled={pending}
@@ -113,6 +114,7 @@ export function DocumentsManager({ documents, topics }: { documents: DocumentIte
                       >
                         {t("documents.replace")}
                       </button>
+                      )}
                       <button
                         type="button"
                         disabled={pending}
