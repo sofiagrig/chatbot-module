@@ -59,6 +59,8 @@ export type PriceHit = {
   description: string;
   price: number;
   notes: string | null;
+  /** Maximum discount as a fraction (0.2 = 20%, 1 = may be waived); null = no discount column. */
+  max_discount: number | null;
 };
 
 /**
@@ -75,7 +77,7 @@ export async function lookupPrice(query: string, payer?: string): Promise<PriceH
   const payerFilter = payer?.trim() ? `%${payer.trim()}%` : null;
   return db()<PriceHit[]>`
     select p.id::int as item_id, d.id as document_id, d.title as price_list, d.payer, d.vat_included,
-           p.sku, p.description, p.price, p.notes
+           p.sku, p.description, p.price, p.notes, p.max_discount
     from chatbot.price_items p
     join chatbot.documents d on d.id = p.document_id
     cross join lateral (
@@ -88,29 +90,46 @@ export async function lookupPrice(query: string, payer?: string): Promise<PriceH
     limit 25`;
 }
 
-/** Totals for price-list rows the model picked (by item_id), computed here, not by the model. */
-export async function calculate(lines: { item_id: number; quantity: number }[], vatRate: number) {
+/**
+ * Totals for price-list rows the model picked (by item_id), computed here, not by the model.
+ * An optional discount_rate per line must not exceed the row's maximum discount.
+ */
+export async function calculate(
+  lines: { item_id: number; quantity: number; discount_rate?: number }[],
+  vatRate: number,
+) {
   const valid = lines.filter((l) => Number.isInteger(l.item_id) && Number.isFinite(l.quantity) && l.quantity > 0);
   if (valid.length === 0) return { error: "no valid lines" };
   const ids = valid.map((l) => l.item_id);
   const rows = await db()<PriceHit[]>`
-    select p.id::int as item_id, d.title as price_list, d.vat_included, p.sku, p.description, p.price
+    select p.id::int as item_id, d.title as price_list, d.vat_included, p.sku, p.description, p.price, p.max_discount
     from chatbot.price_items p join chatbot.documents d on d.id = p.document_id
     where p.id = any(${ids}::bigint[])`;
   const byId = new Map(rows.map((r) => [r.item_id, r]));
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length) return { error: `unknown item_id: ${missing.join(", ")}` };
-  const items: CalcItem[] = valid.map((l) => {
+  const items: CalcItem[] = [];
+  for (const l of valid) {
     const r = byId.get(l.item_id)!;
-    return {
+    const discountRate = l.discount_rate ?? 0;
+    if (!Number.isFinite(discountRate) || discountRate < 0 || discountRate > 1) {
+      return { error: `discount_rate must be between 0 and 1 (item ${r.sku})` };
+    }
+    if (discountRate > (r.max_discount ?? 0)) {
+      return {
+        error: `discount ${discountRate} is above the maximum allowed for ${r.sku} (${r.max_discount ?? "no discount defined"})`,
+      };
+    }
+    items.push({
       sku: r.sku,
       description: r.description,
       priceList: r.price_list,
       unitPrice: r.price,
       vatIncluded: r.vat_included,
       quantity: l.quantity,
-    };
-  });
+      discountRate,
+    });
+  }
   return calculateTotal(items, vatRate);
 }
 

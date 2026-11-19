@@ -101,8 +101,10 @@
       "missing_sku": "שורה {row}: חסר מק״ט",
       "missing_description": "שורה {row}: חסר תיאור",
       "bad_price": "שורה {row}: מחיר לא תקין ({value})",
-      "duplicate_sku": "שורה {row}: המק״ט {value} מופיע פעמיים"
-    }
+      "duplicate_sku": "שורה {row}: המק״ט {value} מופיע פעמיים",
+      "bad_discount": "שורה {row}: ערך הנחה לא תקין ({value}). צריך להיות בין 0 ל-1 או באחוזים."
+    },
+    "maxDiscount": "הנחה עד {percent}%"
   },
   "usage": {
     "title": "שימוש ומשוב",

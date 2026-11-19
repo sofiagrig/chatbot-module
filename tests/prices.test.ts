@@ -24,8 +24,8 @@ test("finds the header row and reads rows", () => {
   assert.equal(result.noHeader, false);
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.rows, [
-    { sku: "29447", description: "עקירת שן רגילה - מומחה", price: 211.7, notes: null },
-    { sku: "29448", description: "עקירת שן כירורגית - מומחה", price: 529.2, notes: "לשן" },
+    { sku: "29447", description: "עקירת שן רגילה - מומחה", price: 211.7, notes: null, maxDiscount: null },
+    { sku: "29448", description: "עקירת שן כירורגית - מומחה", price: 529.2, notes: "לשן", maxDiscount: null },
   ]);
 });
 
@@ -83,7 +83,7 @@ test("sheet without a header row (like the specialist basket file)", () => {
   assert.equal(result.noHeader, false);
   assert.deepEqual(result.errors, []);
   assert.equal(result.rows.length, 7);
-  assert.deepEqual(result.rows[6], { sku: "כזרק", description: "כתר זירקוניה", price: 2328.3, notes: "פרותטיקה" });
+  assert.deepEqual(result.rows[6], { sku: "כזרק", description: "כתר זירקוניה", price: 2328.3, notes: "פרותטיקה", maxDiscount: null });
 });
 
 test("header whose price column is named after the list (like the regular basket file)", () => {
@@ -95,7 +95,7 @@ test("header whose price column is named after the list (like the regular basket
   ]);
   assert.equal(result.noHeader, false);
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(result.rows[1], { sku: "כח", description: "כתר חרסינה מאוחה למתכת לא אצילה", price: 1282.6, notes: "פרותטיקה" });
+  assert.deepEqual(result.rows[1], { sku: "כח", description: "כתר חרסינה מאוחה למתכת לא אצילה", price: 1282.6, notes: "פרותטיקה", maxDiscount: null });
   assert.equal(result.rows[2].price, 769.8);
 });
 
@@ -124,4 +124,31 @@ test("clinic price list with discount columns takes the list price, not the disc
     result.rows.map((r) => [r.sku, r.price]),
     [["ב", 170], ["במ", 490], ["עבמ", 2150], ["כששתל", 0]],
   );
+});
+
+test("reads the maximum discount column", () => {
+  const result = parsePriceMatrix([
+    ["קבוצה", "קוד", "תאור", "מחירון 1.2025", "הגדרת רף הנחה מקסימלי", "מחירון לאחר הנחה"],
+    ["בדיקות", "ב", "בדיקה ראשונית", "170", "1", "0"],
+    ["בדיקות", "במ", "בדיקת מומחה", "490", "0.2", "392"],
+    ["פריו", "עצם", "השתלת עצם", "4944", "25%", "3708"],
+    ["כשל", "כששתל", "שתל נדחה", "0", "0", "0"],
+    ["פריו", "רע", "שורה עם הנחה שגויה", "100", "1.5", "0"],
+  ]);
+  assert.deepEqual(
+    result.rows.map((r) => [r.sku, r.price, r.maxDiscount]),
+    [["ב", 170, 1], ["במ", 490, 0.2], ["עצם", 4944, 0.25], ["כששתל", 0, 0], ["רע", 100, null]],
+  );
+  assert.deepEqual(result.errors.map((e) => `${e.row}:${e.code}`), ["6:bad_discount"]);
+});
+
+test("discount applied to a VAT-inclusive price: 490 with 20% off", () => {
+  const result = calculateTotal(
+    [{ sku: "במ", description: "בדיקת מומחה", priceList: "מרפאה", unitPrice: 490, vatIncluded: true, quantity: 1, discountRate: 0.2 }],
+    0.18,
+  );
+  assert.equal(result.lines[0].unitPriceAfterDiscount, 392);
+  assert.equal(result.total, 392);
+  assert.equal(result.totalBeforeVat, 332.2);
+  assert.equal(result.vat, 59.8);
 });

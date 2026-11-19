@@ -266,6 +266,11 @@ function PriceListPreview({ result }: { result: ParseResult }) {
               <td className="px-2 py-1" dir="ltr">{r.sku}</td>
               <td className="px-2 py-1">{r.description}</td>
               <td className="px-2 py-1 whitespace-nowrap" dir="ltr">{r.price.toLocaleString("he-IL")}</td>
+              {r.maxDiscount !== null && (
+                <td className="px-2 py-1 whitespace-nowrap text-muted">
+                  {t("upload.maxDiscount", { percent: Math.round(r.maxDiscount * 100) })}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
