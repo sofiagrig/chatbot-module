@@ -11,7 +11,7 @@
   },
   "noAccess": {
     "title": "אין גישה",
-    "body": "המודול זמין רק בכתובת bot.shinaim.biz, אחרי אימות המייל של Cloudflare."
+    "body": "המודול זמין רק בכתובת bot.shinaim.net, אחרי אימות המייל של Cloudflare."
   },
   "adminOnly": "העמוד זמין למנהלת המערכת בלבד.",
   "privacy": {

@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// The production site lives at bot.shinaim.biz, behind Cloudflare Access. Requests that reach
+// The production site lives at bot.shinaim.net, behind Cloudflare Access. Requests that reach
 // the production deployment through its *.vercel.app address are sent there. (Every page and
 // action also verifies the Access token itself, see src/lib/auth.ts, so a request that skips
 // Access gets no data either way.)
-const CANONICAL_HOST = process.env.CANONICAL_HOST || "bot.shinaim.biz";
+const CANONICAL_HOST = process.env.CANONICAL_HOST || "bot.shinaim.net";
 
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";
