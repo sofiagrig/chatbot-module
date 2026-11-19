@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlockParam, Tool, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { calculate, loadKnowledge, lookupPrice, vatRate } from "./knowledge";
+import { describeError } from "./errors";
 
 let client: Anthropic | undefined;
 
@@ -164,7 +165,7 @@ export async function answer(history: MessageParam[]): Promise<{ text: string; u
       try {
         content = JSON.stringify(await runTool(block.name, block.input));
       } catch (error) {
-        console.error("tool failed", block.name, error);
+        console.error(`tool failed (${block.name}): ${describeError(error)}`);
         content = JSON.stringify({ error: "tool failed" });
       }
       results.push({ type: "tool_result", tool_use_id: block.id, content });

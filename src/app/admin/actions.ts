@@ -16,6 +16,7 @@ import {
 } from "@/lib/files";
 import type { ParseResult, PriceRow } from "@/lib/prices";
 import { detectIdentifiers, type PrivacyReason } from "@/lib/privacy";
+import { describeError } from "@/lib/errors";
 
 type Purpose = "procedure" | "price_list";
 
@@ -91,7 +92,7 @@ export async function previewProcedure(fileId: string): Promise<ProcedurePreview
     if (!text) return { ok: false, error: "extractFailed" };
     return { ok: true, text, reasons: detectIdentifiers(text) };
   } catch (error) {
-    console.error("extract failed", error);
+    console.error(`extract failed: ${describeError(error)}`);
     return { ok: false, error: "extractFailed" };
   }
 }
@@ -105,7 +106,7 @@ export async function previewPriceList(fileId: string): Promise<PriceListPreview
   try {
     return { ok: true, result: await parsePriceFile(file) };
   } catch (error) {
-    console.error("price list parse failed", error);
+    console.error(`price list parse failed: ${describeError(error)}`);
     return { ok: false, error: "extractFailed" };
   }
 }
@@ -158,7 +159,7 @@ export async function saveProcedure(input: {
       }
     });
   } catch (error) {
-    console.error("save procedure failed", error);
+    console.error(`save procedure failed: ${describeError(error)}`);
     return { ok: false, error: "failed" };
   }
   revalidatePath("/admin/documents");
@@ -220,7 +221,7 @@ export async function savePriceList(input: {
       }
     });
   } catch (error) {
-    console.error("save price list failed", error);
+    console.error(`save price list failed: ${describeError(error)}`);
     return { ok: false, error: "failed" };
   }
   revalidatePath("/admin/documents");

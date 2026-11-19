@@ -8,6 +8,7 @@ import { answer, model } from "@/lib/claude";
 import { db } from "@/lib/db";
 import { documentsByIds } from "@/lib/knowledge";
 import { detectIdentifiers, PRIVACY_NOTICE_VERSION, type PrivacyReason } from "@/lib/privacy";
+import { describeError } from "@/lib/errors";
 
 const MAX_QUESTION = 2000;
 const HISTORY_MESSAGES = 12;
@@ -99,7 +100,7 @@ export async function sendMessage(conversationId: string | null, question: strin
       message: { id: saved.id, content: parsed.content, sources, noAnswer: parsed.noAnswer },
     };
   } catch (error) {
-    console.error("chat failed", error);
+    console.error(`chat failed: ${describeError(error)}`);
     return { ok: false, error: "failed" };
   }
 }
