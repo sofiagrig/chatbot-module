@@ -62,40 +62,41 @@ export function UploadPanel({
     if (!topic.trim() || !title.trim() || !file || (kind === "price_list" && !payer.trim())) {
       return setError("upload.missingFields");
     }
-    const started = await startUpload(file.name, file.size, kind);
-    if (!started.ok) return setError(`upload.${started.error}`);
-    const count = Math.ceil(file.size / CHUNK);
-    for (let i = 0; i < count; i++) {
-      setStep({ name: "uploading", percent: Math.round((i / count) * 100) });
-      const form = new FormData();
-      form.set("fileId", started.fileId);
-      form.set("idx", String(i));
-      form.set("chunk", file.slice(i * CHUNK, (i + 1) * CHUNK));
-      if (!(await uploadChunk(form))) {
-        setStep({ name: "form" });
-        return setError("upload.failed");
-      }
-    }
-    if (!(await finishUpload(started.fileId))) {
+    // Show progress right away: a server action can wait behind an earlier one (e.g. a PDF
+    // still being read after "cancel"), and silence looks like a dead button.
+    setStep({ name: "uploading", percent: 0 });
+    const fail = (key: MessageKey) => {
       setStep({ name: "form" });
-      return setError("upload.failed");
-    }
-    setStep({ name: "reading" });
-    if (kind === "procedure") {
-      const preview = await previewProcedure(started.fileId);
-      if (!preview.ok) {
-        setStep({ name: "form" });
-        return setError(`upload.${preview.error}`);
+      setError(key);
+    };
+    try {
+      const started = await startUpload(file.name, file.size, kind);
+      if (!started.ok) return fail(`upload.${started.error}`);
+      const count = Math.ceil(file.size / CHUNK);
+      for (let i = 0; i < count; i++) {
+        setStep({ name: "uploading", percent: Math.round((i / count) * 100) });
+        const form = new FormData();
+        form.set("fileId", started.fileId);
+        form.set("idx", String(i));
+        form.set("chunk", file.slice(i * CHUNK, (i + 1) * CHUNK));
+        if (!(await uploadChunk(form))) return fail("upload.failed");
       }
-      setPiiChecked(preview.reasons.length === 0);
-      setStep({ name: "procedure", fileId: started.fileId, text: preview.text, reasons: preview.reasons });
-    } else {
-      const preview = await previewPriceList(started.fileId);
-      if (!preview.ok) {
-        setStep({ name: "form" });
-        return setError(`upload.${preview.error}`);
+      if (!(await finishUpload(started.fileId))) return fail("upload.failed");
+      setStep({ name: "reading" });
+      if (kind === "procedure") {
+        const preview = await previewProcedure(started.fileId);
+        if (!preview.ok) return fail(`upload.${preview.error}`);
+        setPiiChecked(preview.reasons.length === 0);
+        setStep({ name: "procedure", fileId: started.fileId, text: preview.text, reasons: preview.reasons });
+      } else {
+        const preview = await previewPriceList(started.fileId);
+        if (!preview.ok) return fail(`upload.${preview.error}`);
+        setStep({ name: "priceList", fileId: started.fileId, result: preview.result });
       }
-      setStep({ name: "priceList", fileId: started.fileId, result: preview.result });
+    } catch (e) {
+      // A server action that throws (connection error, timeout) must not leave the panel stuck.
+      console.error(e);
+      fail("upload.failed");
     }
   }
 
@@ -103,10 +104,16 @@ export function UploadPanel({
     if (step.name !== "procedure" && step.name !== "priceList") return;
     setError(null);
     setStep({ name: "saving", previous: step });
-    const result =
-      step.name === "procedure"
-        ? await saveProcedure({ documentId: replace?.id ?? null, topic, title, content: step.text, fileId: step.fileId })
-        : await savePriceList({ documentId: replace?.id ?? null, topic, title, payer, vatIncluded, fileId: step.fileId });
+    let result: Awaited<ReturnType<typeof saveProcedure>>;
+    try {
+      result =
+        step.name === "procedure"
+          ? await saveProcedure({ documentId: replace?.id ?? null, topic, title, content: step.text, fileId: step.fileId })
+          : await savePriceList({ documentId: replace?.id ?? null, topic, title, payer, vatIncluded, fileId: step.fileId });
+    } catch (e) {
+      console.error(e);
+      result = { ok: false, error: "failed" };
+    }
     if (result.ok) return onDone();
     setStep(step);
     setError(result.error === "rowErrors" ? "upload.rowErrors" : `upload.${result.error}`);
