@@ -7,7 +7,7 @@ patient details. Spec: the "אפיון מודול צ'אט בוט AI" doc.
 
 ## How it works
 
-- **Who:** anyone who passes Cloudflare Access at `bot.shinaim.biz`. There is no separate login:
+- **Who:** anyone who passes Cloudflare Access at `bot.shinaim.net`. There is no separate login:
   the app verifies the Access token on every request and identifies people by that email.
   Admins are listed in `BOOTSTRAP_ADMIN_EMAILS` (or in the `chatbot.roles` table).
 - **Privacy:** every user confirms the privacy notice once. Messages that contain an ID number,
@@ -53,23 +53,23 @@ environment variables (`ANTHROPIC_API_KEY`), never into the code or a chat.
 
 Import this repository into the business Vercel account and set the variables from
 `.env.example`: `CHATBOT_DATABASE_URL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`,
-`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CANONICAL_HOST=bot.shinaim.biz`,
-`BOOTSTRAP_ADMIN_EMAILS`, `VAT_RATE`. Add the domain `bot.shinaim.biz` to the project.
+`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CANONICAL_HOST=bot.shinaim.net`,
+`BOOTSTRAP_ADMIN_EMAILS`, `VAT_RATE`. Add the domain `bot.shinaim.net` to the project.
 
 ### 4. Cloudflare
 
 Same setup as `branches.shinaim.net`:
 
 1. DNS: `bot` CNAME to Vercel, proxied.
-2. Zero Trust → Access → Applications: an application for `bot.shinaim.biz` with the same
+2. Zero Trust → Access → Applications: an application for `bot.shinaim.net` with the same
    policy as the branches site (email one-time code), plus a bypass application for
-   `bot.shinaim.biz/.well-known/acme-challenge` so Vercel can renew the certificate.
+   `bot.shinaim.net/.well-known/acme-challenge` so Vercel can renew the certificate.
 3. Copy the application's **Audience (AUD) tag** to `CF_ACCESS_AUD`, and the team domain
    (`<team>.cloudflareaccess.com`) to `CF_ACCESS_TEAM_DOMAIN`.
 
 Until `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are set, every page answers "no access".
 Preview deployments (`*.vercel.app`) are not behind Access, so they show "no access" too; test on
-`bot.shinaim.biz`.
+`bot.shinaim.net`.
 
 ## Development
 
