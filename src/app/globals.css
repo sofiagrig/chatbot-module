@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* Design tokens (match the approved prototype). Light theme only for now. */
+@theme {
+  --font-sans: "Heebo", system-ui, sans-serif;
+
+  --color-canvas: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-ink: #16212e;
+  --color-muted: #5a6775;
+  --color-line: #e1e6eb;
+  --color-line-soft: #eef1f4;
+  --color-field: #c7cfd8;
+
+  --color-nav: #13293d;
+  --color-nav-active: #24425c;
+  --color-nav-fg: #c9d6e2; /* 10.1:1 on nav */
+  --color-nav-fg-active: #ffffff; /* 10.5:1 on nav-active */
+  --color-nav-indicator: #5ec8ce;
+  --color-nav-muted: #9fb3c8;
+
+  --color-brand: #0e7c86;
+  --color-brand-dark: #0a5f67;
+  --color-brand-soft: #e3f3f4;
+
+  --color-ok: #1c6b34;
+  --color-ok-soft: #e6f4ea;
+  --color-warn: #8a4100;
+  --color-warn-strong: #b85c00;
+  --color-warn-soft: #fdf0e1;
+  --color-danger: #a61b12;
+  --color-danger-soft: #fdecea;
+  --color-badge: #f2a33a;
+  --color-whatsapp: #157a45;
+
+  /* Fields of practice: text color on its soft background (each pair at least 6:1). */
+  --color-practice-general: #334155;
+  --color-practice-general-soft: #eceff3;
+  --color-practice-periodontics: #9d174d;
+  --color-practice-periodontics-soft: #fce7ef;
+  --color-practice-endodontics: #9a3412;
+  --color-practice-endodontics-soft: #fdebdd;
+  --color-practice-orthodontics: #5b21b6;
+  --color-practice-orthodontics-soft: #efe7fb;
+  --color-practice-prosthodontics: #1d4e9a;
+  --color-practice-prosthodontics-soft: #e2ecfa;
+  --color-practice-oral-surgery: #991b1b;
+  --color-practice-oral-surgery-soft: #fbe4e2;
+  --color-practice-implants: #3730a3;
+  --color-practice-implants-soft: #e7e8fb;
+  --color-practice-pediatric: #4a5d12;
+  --color-practice-pediatric-soft: #edf4d6;
+  --color-practice-aesthetics: #86198f;
+  --color-practice-aesthetics-soft: #f8e5f6;
+  --color-practice-oral-medicine: #115e59;
+  --color-practice-oral-medicine-soft: #ddf2ef;
+  /* Hygienists. */
+  --color-practice-hygiene: #166534;
+  --color-practice-hygiene-soft: #e0f3e5;
+  /* Recognized specialist: a filled badge, white text (6:1). */
+  --color-recognized: #a14a06;
+}
+
+/*
+ * Base element styles live in @layer base: in Tailwind v4, rules outside a layer beat every
+ * utility, so an unlayered `a { color }` would override text-white etc. on links.
+ */
+@layer base {
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  a {
+    color: var(--color-brand);
+  }
+  a:hover {
+    color: var(--color-brand-dark);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+/* Bot answers rendered from Markdown. */
+@layer components {
+  .answer {
+    overflow-wrap: anywhere;
+    line-height: 1.65;
+  }
+  .answer > * + * {
+    margin-top: 0.5em;
+  }
+  .answer ol {
+    list-style: decimal;
+    padding-inline-start: 1.4em;
+  }
+  .answer ul {
+    list-style: disc;
+    padding-inline-start: 1.4em;
+  }
+  .answer li + li {
+    margin-top: 0.2em;
+  }
+  .answer strong {
+    font-weight: 700;
+  }
+  .answer table {
+    border-collapse: collapse;
+    font-size: 14px;
+    display: block;
+    overflow-x: auto;
+  }
+  .answer th,
+  .answer td {
+    border: 1px solid var(--color-line);
+    padding: 4px 8px;
+    text-align: start;
+  }
+  .answer th {
+    background: var(--color-line-soft);
+    font-weight: 600;
+  }
+}
