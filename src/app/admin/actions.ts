@@ -215,9 +215,10 @@ export async function savePriceList(input: {
         description: r.description,
         price: r.price,
         notes: r.notes,
+        max_discount: r.maxDiscount,
       }));
       for (let i = 0; i < rows.length; i += 500) {
-        await tx`insert into chatbot.price_items ${tx(rows.slice(i, i + 500), "document_id", "sku", "description", "price", "notes")}`;
+        await tx`insert into chatbot.price_items ${tx(rows.slice(i, i + 500), "document_id", "sku", "description", "price", "notes", "max_discount")}`;
       }
     });
   } catch (error) {

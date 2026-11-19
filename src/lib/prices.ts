@@ -1,16 +1,27 @@
 // Price-list parsing and totals. Pure functions (no server imports) for unit tests.
 
-export type PriceRow = { sku: string; description: string; price: number; notes: string | null };
+export type PriceRow = {
+  sku: string;
+  description: string;
+  price: number;
+  notes: string | null;
+  /** Maximum discount as a fraction of the price (0.2 = 20%, 1 = may be waived), if the list has one. */
+  maxDiscount: number | null;
+};
 
 export type ParseResult = {
   rows: PriceRow[];
   /** Problems found, each with the Excel row number. Saving is refused while any exist. */
-  errors: { row: number; code: "missing_sku" | "missing_description" | "bad_price" | "duplicate_sku"; value?: string }[];
+  errors: {
+    row: number;
+    code: "missing_sku" | "missing_description" | "bad_price" | "duplicate_sku" | "bad_discount";
+    value?: string;
+  }[];
   /** True when the code (SKU), description and price columns could not be identified. */
   noHeader: boolean;
 };
 
-type Column = "sku" | "description" | "price" | "group" | "notes";
+type Column = "sku" | "description" | "price" | "group" | "notes" | "discount";
 
 const HEADER: Record<Column, RegExp> = {
   sku: /^(מק["'״׳]?\s*ט(\s*פריט)?|מקט|sku|קוד(\s*(טיפול|פריט))?)$/i,
@@ -18,6 +29,8 @@ const HEADER: Record<Column, RegExp> = {
   price: /^(מחיר(\s*(פריט|לפני מע["״]?מ|כולל מע["״]?מ))?|תעריף|price)(\s*\(.*\))?$/i,
   group: /^(קבוצה|קטגוריה|תחום|group|category)$/i,
   notes: /^(הערות?|notes?)$/i,
+  // "הגדרת רף הנחה מקסימלי", "הנחה מקסימלית", "אחוז הנחה". Not "מחירון לאחר הנחה" (derived).
+  discount: /^(הגדרת\s*)?((רף|אחוז|שיעור)\s*)?הנחה(\s*מקסימלי(ת)?)?(\s*\(.*\))?$/i,
 };
 
 const clean = (v: unknown): string => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -30,6 +43,14 @@ export function parsePrice(value: unknown): number | null {
   const text = clean(value).replace(/[₪$,\s]|ש["״]?ח/g, "");
   if (!/^\d+(\.\d+)?$/.test(text)) return null;
   return round(Number(text));
+}
+
+/** "0.2", 0.2 or "20%" → 0.2; null for anything that is not a fraction between 0 and 1. */
+export function parseDiscount(value: unknown): number | null {
+  const text = clean(value).replace(/\s/g, "");
+  const percent = /^(\d+(\.\d+)?)%$/.exec(text);
+  const n = percent ? Number(percent[1]) / 100 : typeof value === "number" ? value : /^\d+(\.\d+)?$/.test(text) ? Number(text) : NaN;
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? Math.round(n * 1000) / 1000 : null;
 }
 
 /** A header row is one where at least two cells name known columns (code, description, ...). */
@@ -122,12 +143,17 @@ export function parsePriceMatrix(matrix: unknown[][]): ParseResult {
     const price = parsePrice(cells[cols.price]);
     const extra = [cols.group, cols.notes].filter((c): c is number => c !== undefined).map((c) => clean(cells[c]));
     const notes = extra.filter(Boolean).join(" · ") || null;
+    const discountCell = cols.discount !== undefined ? cells[cols.discount] : undefined;
+    const maxDiscount = cols.discount !== undefined && clean(discountCell) !== "" ? parseDiscount(discountCell) : null;
+    if (cols.discount !== undefined && clean(discountCell) !== "" && maxDiscount === null) {
+      errors.push({ row: excelRow, code: "bad_discount", value: clean(discountCell) });
+    }
     if (!sku) errors.push({ row: excelRow, code: "missing_sku" });
     if (!description) errors.push({ row: excelRow, code: "missing_description" });
     if (price === null) errors.push({ row: excelRow, code: "bad_price", value: clean(cells[cols.price]) });
     if (sku && seen.has(sku)) errors.push({ row: excelRow, code: "duplicate_sku", value: sku });
     if (sku) seen.add(sku);
-    if (sku && description && price !== null) rows.push({ sku, description, price, notes });
+    if (sku && description && price !== null) rows.push({ sku, description, price, notes, maxDiscount });
   }
   return { rows, errors, noHeader: false };
 }
@@ -139,6 +165,8 @@ export type CalcItem = {
   unitPrice: number;
   vatIncluded: boolean;
   quantity: number;
+  /** Discount given on this line, as a fraction of the unit price (0 when none). */
+  discountRate?: number;
 };
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -149,8 +177,16 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
  */
 export function calculateTotal(items: CalcItem[], vatRate: number) {
   const lines = items.map((i) => {
-    const lineTotal = round2(i.unitPrice * i.quantity);
-    return { ...i, lineTotal, lineTotalBeforeVat: round2(i.vatIncluded ? lineTotal / (1 + vatRate) : lineTotal) };
+    const discountRate = i.discountRate ?? 0;
+    const unitPriceAfterDiscount = round2(i.unitPrice * (1 - discountRate));
+    const lineTotal = round2(unitPriceAfterDiscount * i.quantity);
+    return {
+      ...i,
+      discountRate,
+      unitPriceAfterDiscount,
+      lineTotal,
+      lineTotalBeforeVat: round2(i.vatIncluded ? lineTotal / (1 + vatRate) : lineTotal),
+    };
   });
   let net = 0;
   let gross = 0;

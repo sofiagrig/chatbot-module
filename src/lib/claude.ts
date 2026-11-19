@@ -39,6 +39,10 @@ Rules:
    If the same treatment appears in more than one price list (e.g. the regular and the specialist basket)
    and the question does not say which, give this breakdown for each of them (at most three), labelled by
    price list; call calculate separately for each. If many different treatments match, ask which one.
+   Discounts: mention them only when asked. max_discount is a fraction of the list price: 1 means the
+   treatment may be given free (100% off), 0.2 means up to 20% off, 0 means no discount; null means the
+   price list defines no discount. When asked about a discount, state the maximum as a percentage and
+   give the price after it by calling calculate with discount_rate = max_discount (same three lines).
 4. Totals for several items or quantities: calculate with all the lines; show each line (quantity x unit
    price = line total), then the same three lines for the whole. Never add, multiply or compute VAT yourself.
 5. If the question is ambiguous, ask one short clarifying question instead of guessing.
@@ -79,7 +83,8 @@ const TOOLS: Tool[] = [
     name: "lookup_price",
     description:
       "Search the uploaded price lists by SKU (מק\"ט) or by words of the treatment name. Returns up to 25 rows " +
-      "with item_id, price list, payer, SKU, description, price and whether it includes VAT. Try other word forms " +
+      "with item_id, price list, payer, SKU, description, price, whether it includes VAT and max_discount " +
+      "(the maximum discount as a fraction, null if the list defines none). Try other word forms " +
       "(e.g. without ה/ו/ב/ל prefixes, singular instead of plural) if nothing is found.",
     input_schema: {
       type: "object",
@@ -93,8 +98,8 @@ const TOOLS: Tool[] = [
   {
     name: "calculate",
     description:
-      "Compute totals for price-list rows: line totals, total before VAT, VAT and total including VAT. " +
-      "Use the item_id values returned by lookup_price.",
+      "Compute totals for price-list rows: line totals, total before VAT, VAT and total including VAT, " +
+      "optionally with a discount per line. Use the item_id values returned by lookup_price.",
     input_schema: {
       type: "object",
       properties: {
@@ -105,6 +110,10 @@ const TOOLS: Tool[] = [
             properties: {
               item_id: { type: "integer" },
               quantity: { type: "number", description: "Number of units (e.g. teeth)" },
+              discount_rate: {
+                type: "number",
+                description: "Optional discount as a fraction (0.2 = 20%). Must not exceed the row's max_discount.",
+              },
             },
             required: ["item_id", "quantity"],
           },
