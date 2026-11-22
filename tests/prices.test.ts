@@ -34,7 +34,7 @@ test("reports row problems with Excel row numbers", () => {
     ["מקט", "תיאור", "מחיר"],
     ["1", "א", "abc"],
     ["", "ב", "10"],
-    ["1", "ג", "20"],
+    ["1", "א", "20"],
   ]);
   assert.deepEqual(
     result.errors.map((e) => `${e.row}:${e.code}`),
@@ -151,4 +151,17 @@ test("discount applied to a VAT-inclusive price: 490 with 20% off", () => {
   assert.equal(result.total, 392);
   assert.equal(result.totalBeforeVat, 332.2);
   assert.equal(result.vat, 59.8);
+});
+
+test("same code with different descriptions is allowed; conditions go to notes", () => {
+  const result = parsePriceMatrix([
+    ["קבוצה", "קוד", "תאור", "מועדון שווה 1.2025", "תנאים", "הגדרת רף הנחה מקסימלי", "מחירון לאחר הנחה"],
+    ["בדיקות", "במ", "בדיקת רופא שיניים מומחה (אורתו / כירורג)", 90, "אחת לשנה", 0, 90],
+    ["בדיקות", "במ", "בדיקת רופא שיניים מומחה פריודונט", 350, null, 0, 350],
+  ]);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(
+    result.rows.map((r) => [r.sku, r.price, r.notes]),
+    [["במ", 90, "בדיקות · אחת לשנה"], ["במ", 350, "בדיקות"]],
+  );
 });
