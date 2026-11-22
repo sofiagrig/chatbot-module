@@ -71,8 +71,9 @@ export async function sendMessage(conversationId: string | null, question: strin
   const previous = await sql<{ role: "user" | "assistant"; content: string }[]>`
     select role, content from (
       select role, content, created_at from chatbot.messages
-      where conversation_id = ${convId} order by created_at desc limit ${HISTORY_MESSAGES}
-    ) m order by created_at`;
+      where conversation_id = ${convId}
+      order by created_at desc, (role = 'user') limit ${HISTORY_MESSAGES}
+    ) m order by created_at, (role = 'assistant')`;
 
   const history: MessageParam[] = [...previous, { role: "user" as const, content: text }];
   // The API needs the conversation to start with the user and alternate roles.
@@ -86,10 +87,13 @@ export async function sendMessage(conversationId: string | null, question: strin
     // The question is stored together with its answer, so a failed attempt leaves no
     // half-finished turn in the history.
     const saved = await sql.begin(async (tx) => {
-      await tx`insert into chatbot.messages (conversation_id, role, content) values (${convId}, 'user', ${text})`;
+      // clock_timestamp(), not now(): both rows are in one transaction and must not share a time.
+      await tx`
+        insert into chatbot.messages (conversation_id, role, content, created_at)
+        values (${convId}, 'user', ${text}, clock_timestamp())`;
       const [row] = await tx<{ id: string }[]>`
-        insert into chatbot.messages (conversation_id, role, content, sources, no_answer, model, usage)
-        values (${convId}, 'assistant', ${parsed.content}, ${tx.json(sources)}, ${parsed.noAnswer}, ${model()}, ${tx.json(usage)})
+        insert into chatbot.messages (conversation_id, role, content, sources, no_answer, model, usage, created_at)
+        values (${convId}, 'assistant', ${parsed.content}, ${tx.json(sources)}, ${parsed.noAnswer}, ${model()}, ${tx.json(usage)}, clock_timestamp())
         returning id`;
       await tx`update chatbot.conversations set updated_at = now() where id = ${convId}`;
       return row;
