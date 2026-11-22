@@ -28,7 +28,7 @@ const HEADER: Record<Column, RegExp> = {
   description: /^(תי?אור(\s*(טיפול|פריט))?|שם\s*(ה)?טיפול|טיפול|description)$/i,
   price: /^(מחיר(\s*(פריט|לפני מע["״]?מ|כולל מע["״]?מ))?|תעריף|price)(\s*\(.*\))?$/i,
   group: /^(קבוצה|קטגוריה|תחום|group|category)$/i,
-  notes: /^(הערות?|notes?)$/i,
+  notes: /^(הערות?|notes?|תנאים|תנאי(\s*זכאות)?|conditions?)$/i,
   // "הגדרת רף הנחה מקסימלי", "הנחה מקסימלית", "אחוז הנחה". Not "מחירון לאחר הנחה" (derived).
   discount: /^(הגדרת\s*)?((רף|אחוז|שיעור)\s*)?הנחה(\s*מקסימלי(ת)?)?(\s*\(.*\))?$/i,
 };
@@ -151,8 +151,11 @@ export function parsePriceMatrix(matrix: unknown[][]): ParseResult {
     if (!sku) errors.push({ row: excelRow, code: "missing_sku" });
     if (!description) errors.push({ row: excelRow, code: "missing_description" });
     if (price === null) errors.push({ row: excelRow, code: "bad_price", value: clean(cells[cols.price]) });
-    if (sku && seen.has(sku)) errors.push({ row: excelRow, code: "duplicate_sku", value: sku });
-    if (sku) seen.add(sku);
+    // Codes are not always unique (e.g. "במ" for two specialists at different prices), so only a
+    // row repeating both the code and the description is an error.
+    const key = `${sku}\u0000${description}`;
+    if (sku && seen.has(key)) errors.push({ row: excelRow, code: "duplicate_sku", value: sku });
+    if (sku) seen.add(key);
     if (sku && description && price !== null) rows.push({ sku, description, price, notes, maxDiscount });
   }
   return { rows, errors, noHeader: false };

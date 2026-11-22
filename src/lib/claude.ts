@@ -36,6 +36,7 @@ Rules:
      - סה"כ כולל מע"מ: <total> ₪
    Format amounts with a thousands separator and two decimals (1,086.95).
    A price of 0 means the list does not charge for it: say "ללא חיוב במחירון" instead of a breakdown.
+   A row's notes hold its group and, in some lists, conditions (e.g. "אחת לשנה"); mention conditions.
    If the same treatment appears in more than one price list (e.g. the regular and the specialist basket)
    and the question does not say which, give this breakdown for each of them (at most three), labelled by
    price list; call calculate separately for each. If many different treatments match, ask which one.
