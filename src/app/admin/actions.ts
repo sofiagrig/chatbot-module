@@ -18,6 +18,7 @@ import type { ParseResult, PriceRow } from "@/lib/prices";
 import { detectIdentifiers, type PrivacyReason } from "@/lib/privacy";
 import { t } from "@/i18n";
 import { describeError } from "@/lib/errors";
+import { replaceSections } from "@/lib/knowledge";
 
 type Purpose = "procedure" | "price_list";
 
@@ -153,10 +154,13 @@ export async function saveProcedure(input: {
         if (input.fileId && old.file_id && old.file_id !== input.fileId) {
           await tx`delete from chatbot.files where id = ${old.file_id}`;
         }
+        await replaceSections(tx, input.documentId, content);
       } else {
-        await tx`
+        const [doc] = await tx<{ id: string }[]>`
           insert into chatbot.documents (topic_id, kind, title, content, file_id, uploaded_by)
-          values (${topicRow}, 'procedure', ${title}, ${content}, ${input.fileId}, ${user.email})`;
+          values (${topicRow}, 'procedure', ${title}, ${content}, ${input.fileId}, ${user.email})
+          returning id`;
+        await replaceSections(tx, doc.id, content);
       }
     });
   } catch (error) {

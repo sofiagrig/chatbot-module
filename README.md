@@ -14,13 +14,16 @@ patient details. Spec: the "אפיון מודול צ'אט בוט AI" doc.
   a phone number or another long number are blocked before they are stored or sent to Claude
   (`src/lib/privacy.ts`); only who/when/why is logged. The bot refuses patient and medical
   questions.
-- **Knowledge:** procedures (PDF, Word, text) are turned into text when uploaded (PDFs are read
-  by Claude, which handles tables and text in images); the admin checks and can edit the text
+- **Knowledge:** procedures (PDF, Word, text) are turned into text when uploaded (PDFs up to 12
+  pages are read by Claude, which handles tables and text in images; longer PDFs, e.g. insurance
+  policies, are read as plain text page by page); the admin checks and can edit the text
   before saving. Price lists (Excel) become rows: SKU, description, price, per payer, with or
   without VAT. Uploading a new version replaces the old one.
 - **Answers:** Claude (`ANTHROPIC_MODEL`, default Claude Sonnet 5.5) gets all procedure texts
-  (cached between questions) plus two tools: `lookup_price` (search the price rows) and
-  `calculate` (totals and VAT, computed in code). Each answer lists its source documents.
+  (cached between questions) plus three tools: `lookup_price` (search the price rows),
+  `calculate` (totals and VAT, computed in code) and `search_documents`. Documents over 30,000
+  characters are not sent whole: they are split into sections (`chatbot.document_chunks`) and
+  the bot searches them. Each answer lists its source documents.
 - **Admin screens:** `/admin/documents` (upload, replace, delete) and `/admin/usage`
   (questions, unanswered, "not helpful", privacy blocks and estimated cost, last 30 days).
 
@@ -102,7 +105,9 @@ src/components/           chat, admin upload panel, layout
 src/lib/auth.ts           Cloudflare Access token check, roles
 src/lib/privacy.ts        patient-identifier detection
 src/lib/claude.ts         prompt, tools, PDF reading
-src/lib/knowledge.ts      documents, price search, totals
+src/lib/knowledge.ts      documents, section and price search, totals
+src/lib/sections.ts       splitting long documents, search words
+src/lib/pdf.ts            plain text of long PDFs (right-to-left lines)
 src/lib/prices.ts         Excel price-list parsing, VAT totals
 src/i18n/he.json          all Hebrew UI strings
 tests/                    unit tests (node --test)
