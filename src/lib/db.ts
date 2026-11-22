@@ -10,7 +10,10 @@ import { cache } from "react";
 // between requests; a connection kept open across a freeze can be dropped by the network
 // without either side noticing, and the next query on it then waits until the function's time
 // limit (this took the whole site down). A fresh connection per request avoids that.
-// The Supabase transaction pooler does not support prepared statements, hence prepare: false.
+// The Supabase transaction pooler (Supavisor) does not support prepared statements, hence
+// prepare: false. It also mishandles pipelining (several queries sent on one connection before
+// the first answers): Postgres is left waiting for the rest of a query that never arrives, and
+// the request hangs. max_pipeline: 1 sends one query at a time; Promise.all just waits its turn.
 
 function connect(): postgres.Sql {
   const url = process.env.CHATBOT_DATABASE_URL?.trim();
@@ -19,6 +22,7 @@ function connect(): postgres.Sql {
   return postgres(url, {
     prepare: false,
     max: 1,
+    max_pipeline: 1,
     idle_timeout: 5,
     connect_timeout: 10,
     ssl: local ? false : "require",
