@@ -1,13 +1,16 @@
 import "server-only";
+import { after } from "next/server";
 import postgres from "postgres";
+import { cache } from "react";
 
-// One small pool per server instance. The app connects as chatbot_app, a role that can use
-// the chatbot schema only (see dental-branch-directory: *_chatbot_schema.sql).
+// Database access as chatbot_app, a role that can use the chatbot schema only
+// (see dental-branch-directory: *_chatbot_schema.sql).
+//
+// One connection per request, closed when the response is done. Vercel freezes a function
+// between requests; a connection kept open across a freeze can be dropped by the network
+// without either side noticing, and the next query on it then waits until the function's time
+// limit (this took the whole site down). A fresh connection per request avoids that.
 // The Supabase transaction pooler does not support prepared statements, hence prepare: false.
-
-declare global {
-  var chatbotSql: postgres.Sql | undefined;
-}
 
 function connect(): postgres.Sql {
   const url = process.env.CHATBOT_DATABASE_URL?.trim();
@@ -15,9 +18,9 @@ function connect(): postgres.Sql {
   const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
   return postgres(url, {
     prepare: false,
-    max: 3,
-    idle_timeout: 20,
-    connect_timeout: 15,
+    max: 1,
+    idle_timeout: 5,
+    connect_timeout: 10,
     ssl: local ? false : "require",
     // Numeric prices arrive as strings unless parsed.
     types: {
@@ -31,7 +34,28 @@ function connect(): postgres.Sql {
   });
 }
 
+declare global {
+  var chatbotSqlOutsideRequest: postgres.Sql | undefined;
+}
+
+const forRequest = cache((): postgres.Sql => {
+  const sql = connect();
+  try {
+    after(() => sql.end({ timeout: 5 }));
+  } catch (error) {
+    void sql.end({ timeout: 0 });
+    throw error;
+  }
+  if (process.env.DB_DEBUG) console.log("db: new connection for request");
+  return sql;
+});
+
 export function db(): postgres.Sql {
-  globalThis.chatbotSql ??= connect();
-  return globalThis.chatbotSql;
+  try {
+    return forRequest();
+  } catch {
+    // Outside a Next.js request (scripts, tests): one shared connection.
+    globalThis.chatbotSqlOutsideRequest ??= connect();
+    return globalThis.chatbotSqlOutsideRequest;
+  }
 }
