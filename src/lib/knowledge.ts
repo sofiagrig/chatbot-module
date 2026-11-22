@@ -1,6 +1,8 @@
 import "server-only";
+import type { TransactionSql } from "postgres";
 import { db } from "./db";
 import { calculateTotal, type CalcItem } from "./prices";
+import { LARGE_DOCUMENT_CHARS, searchTerms, splitIntoSections } from "./sections";
 
 export type DocumentSummary = {
   id: string;
@@ -27,13 +29,25 @@ export async function listTopics(): Promise<{ id: string; name: string }[]> {
   return db()`select id, name from chatbot.topics order by name`;
 }
 
-/** Everything the bot reads on each question: the text documents and a list of price lists. */
+/**
+ * Everything the bot reads on each question: the text documents, the list of long documents it
+ * searches instead (with search_documents), and the list of price lists.
+ */
 export async function loadKnowledge() {
   const sql = db();
   const texts = await sql<(DocumentSummary & { content: string })[]>`
     select d.id, d.title, d.kind, t.name as topic, d.payer, d.vat_included, d.updated_at, d.content
     from chatbot.documents d join chatbot.topics t on t.id = d.topic_id
-    where d.kind <> 'price_list'
+    where d.kind <> 'price_list' and length(d.content) <= ${LARGE_DOCUMENT_CHARS}
+    order by t.name, d.title`;
+  const searchable = await sql<(DocumentSummary & { sections: number; pages: number | null })[]>`
+    select d.id, d.title, d.kind, t.name as topic, d.payer, d.vat_included, d.updated_at,
+           count(c.idx)::int as sections, max(c.page)::int as pages
+    from chatbot.documents d
+    join chatbot.topics t on t.id = d.topic_id
+    left join chatbot.document_chunks c on c.document_id = d.id
+    where d.kind <> 'price_list' and length(d.content) > ${LARGE_DOCUMENT_CHARS}
+    group by d.id, t.name
     order by t.name, d.title`;
   const priceLists = await sql<(DocumentSummary & { item_count: number })[]>`
     select d.id, d.title, d.kind, t.name as topic, d.payer, d.vat_included, d.updated_at,
@@ -41,7 +55,49 @@ export async function loadKnowledge() {
     from chatbot.documents d join chatbot.topics t on t.id = d.topic_id
     where d.kind = 'price_list'
     order by d.payer, d.title`;
-  return { texts, priceLists };
+  return { texts, searchable, priceLists };
+}
+
+/** Stores the searchable sections of a document (none when it is short enough to read whole). */
+export async function replaceSections(tx: TransactionSql, documentId: string, content: string): Promise<number> {
+  await tx`delete from chatbot.document_chunks where document_id = ${documentId}`;
+  if (content.length <= LARGE_DOCUMENT_CHARS) return 0;
+  const rows = splitIntoSections(content).map((s) => ({
+    document_id: documentId,
+    idx: s.idx,
+    page: s.page,
+    content: s.content,
+  }));
+  for (let i = 0; i < rows.length; i += 200) {
+    await tx`insert into chatbot.document_chunks ${tx(rows.slice(i, i + 200))}`;
+  }
+  return rows.length;
+}
+
+export type SectionHit = { document_id: string; title: string; page: number | null; content: string };
+
+/**
+ * Sections of long documents that contain the most words of the query (each word also matched
+ * without a one-letter prefix). Optionally limited to some documents.
+ */
+export async function searchDocuments(query: string, documentIds?: string[]): Promise<SectionHit[]> {
+  const { words, groups } = searchTerms(query);
+  if (words.length === 0) return [];
+  const ids = documentIds?.filter((id) => /^[0-9a-f-]{36}$/i.test(id)) ?? [];
+  return db()<SectionHit[]>`
+    select c.document_id, d.title, c.page, c.content
+    from chatbot.document_chunks c
+    join chatbot.documents d on d.id = c.document_id
+    cross join lateral (
+      select count(distinct t.g) as hits,
+             sum((length(c.content) - length(replace(lower(c.content), t.w, ''))) / length(t.w)) as occurrences
+      from unnest(${words}::text[], ${groups}::int[]) as t(w, g)
+      where c.content ilike '%' || t.w || '%'
+    ) m
+    where m.hits > 0
+      and (cardinality(${ids}::uuid[]) = 0 or c.document_id = any(${ids}::uuid[]))
+    order by m.hits desc, m.occurrences desc, c.document_id, c.idx
+    limit 8`;
 }
 
 export async function documentsByIds(ids: string[]): Promise<{ id: string; title: string; updated_at: Date }[]> {

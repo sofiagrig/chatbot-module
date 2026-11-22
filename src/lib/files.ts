@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import mammoth from "mammoth";
 import { transcribePdf } from "./claude";
 import { db } from "./db";
+import { pdfToText } from "./pdf";
 import { parsePriceMatrix, type ParseResult } from "./prices";
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -27,11 +28,22 @@ export async function readFile(fileId: string): Promise<{ name: string; data: Bu
   return row?.data ? { name: row.file_name, data: row.data } : null;
 }
 
-/** Extracts readable text from a procedure file. PDFs go through Claude (tables, images). */
+/** PDFs longer than this are read as plain text: a Claude transcription cannot be that long. */
+const LONG_PDF_PAGES = 12;
+
+/**
+ * Extracts readable text from a procedure file. Short PDFs go through Claude (tables, text in
+ * images); long ones (e.g. insurance policies) are read as plain text, page by page.
+ */
 export async function extractText(file: { name: string; data: Buffer }): Promise<string> {
   switch (extensionOf(file.name)) {
-    case "pdf":
-      return transcribePdf(file.data);
+    case "pdf": {
+      const { pages, text } = await pdfToText(file.data);
+      if (pages <= LONG_PDF_PAGES) return transcribePdf(file.data);
+      // A long PDF with almost no text is a scan; it cannot be read without a text layer.
+      if (text.length < pages * 200) throw new Error(`long PDF without a text layer (${pages} pages)`);
+      return text;
+    }
     case "docx": {
       const { value } = await mammoth.extractRawText({ buffer: file.data });
       return value.replace(/\n{3,}/g, "\n\n").trim();

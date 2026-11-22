@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "4mb",
     },
   },
-  serverExternalPackages: ["exceljs", "mammoth"],
+  serverExternalPackages: ["exceljs", "mammoth", "unpdf"],
 };
 
 export default nextConfig;

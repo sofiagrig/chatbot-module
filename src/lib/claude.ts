@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlockParam, Tool, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
-import { calculate, loadKnowledge, lookupPrice, vatRate } from "./knowledge";
+import { calculate, loadKnowledge, lookupPrice, searchDocuments, vatRate } from "./knowledge";
 import { describeError } from "./errors";
 
 let client: Anthropic | undefined;
@@ -53,11 +53,19 @@ Rules:
    names exactly as written in the documents.
 8. Answers based on documents or price lists end with the marker [[sources: <document ids>]], listing the
    id of every document or price list you used (ids are given below and in tool results).
-   Do not mention document ids anywhere else in the text.`;
+   Do not mention document ids anywhere else in the text.
+9. The documents listed in <searchable_documents> (e.g. insurance policies) are too long to include here.
+   To answer from them, call search_documents with a few Hebrew keywords, in base form without ה/ו/ב/ל
+   prefixes. If the passages returned do not answer the question, search again with synonyms or related
+   terms (e.g. כתר, שיקום, השתתפות עצמית, תקופת אכשרה, החרגה) before concluding there is no answer.
+   Answer only from the returned passages and name the section number (and the page, when given) you
+   relied on. If several of these documents could apply (e.g. policies of different groups) and the
+   question does not say which, ask which one, listing their titles. A policy describes general terms:
+   never confirm that a specific patient is covered or eligible; say that this is checked with the insurer.`;
 
 /** System prompt: rules + all text documents + the list of price lists. The large part is cached. */
 async function systemPrompt(): Promise<TextBlockParam[]> {
-  const { texts, priceLists } = await loadKnowledge();
+  const { texts, searchable, priceLists } = await loadKnowledge();
   const docs = texts
     .map(
       (d) =>
@@ -72,7 +80,18 @@ async function systemPrompt(): Promise<TextBlockParam[]> {
         )
         .join("\n")
     : "(none uploaded yet)";
-  const knowledge = `<documents>\n${docs || "(no documents uploaded yet)"}\n</documents>\n\n<price_lists>\n${lists}\n</price_lists>`;
+  const searchableList = searchable.length
+    ? searchable
+        .map(
+          (d) =>
+            `- id=${d.id} | "${d.title}" | topic: ${d.topic} | ${d.pages ? `${d.pages} pages | ` : ""}updated ${d.updated_at.toISOString().slice(0, 10)}`,
+        )
+        .join("\n")
+    : "(none)";
+  const knowledge =
+    `<documents>\n${docs || "(no documents uploaded yet)"}\n</documents>\n\n` +
+    `<searchable_documents>\n${searchableList}\n</searchable_documents>\n\n` +
+    `<price_lists>\n${lists}\n</price_lists>`;
   return [
     { type: "text", text: SYSTEM_RULES },
     { type: "text", text: knowledge, cache_control: { type: "ephemeral" } },
@@ -94,6 +113,25 @@ const TOOLS: Tool[] = [
       properties: {
         query: { type: "string", description: "SKU or a few words of the treatment name, in Hebrew" },
         payer: { type: "string", description: "Optional: payer or price list name to filter by, e.g. משרד הבטחון" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "search_documents",
+    description:
+      "Search the long documents listed in <searchable_documents> (e.g. insurance policies). Returns up to 8 " +
+      "passages, best matches first, each with document_id, title, page and text. Use a few Hebrew keywords; " +
+      "optionally limit the search to some documents by id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "A few Hebrew keywords, e.g. כתר השתתפות עצמית" },
+        document_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: ids from <searchable_documents> to search in",
+        },
       },
       required: ["query"],
     },
@@ -133,6 +171,11 @@ async function runTool(name: string, input: unknown): Promise<unknown> {
     const rows = await lookupPrice(String(args.query ?? ""), args.payer ? String(args.payer) : undefined);
     return rows.length ? rows : { result: "no matching rows" };
   }
+  if (name === "search_documents") {
+    const ids = Array.isArray(args.document_ids) ? args.document_ids.map(String) : undefined;
+    const hits = await searchDocuments(String(args.query ?? ""), ids);
+    return hits.length ? hits : { result: "no matching passages; try other words" };
+  }
   if (name === "calculate") {
     const lines = Array.isArray(args.lines) ? (args.lines as { item_id: number; quantity: number }[]) : [];
     return calculate(lines, vatRate());
@@ -148,7 +191,7 @@ export async function answer(history: MessageParam[]): Promise<{ text: string; u
   const messages = [...history];
   const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
-  for (let round = 0; round < 6; round++) {
+  for (let round = 0; round < 8; round++) {
     const response = await anthropic().messages.create({
       model: model(),
       max_tokens: 2000,
