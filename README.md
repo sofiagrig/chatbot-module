@@ -24,6 +24,9 @@ patient details. Spec: the "אפיון מודול צ'אט בוט AI" doc.
   `calculate` (totals and VAT, computed in code) and `search_documents`. Documents over 30,000
   characters are not sent whole: they are split into sections (`chatbot.document_chunks`) and
   the bot searches them. Each answer lists its source documents.
+- **Answer style:** admins write free-text instructions on tone, length and format at
+  `/admin/style` (`chatbot.settings`). They are added to the prompt after the fixed rules, which
+  always win (patient/medical refusal, price format, sources, answering only from the material).
 - **Admin screens:** `/admin/documents` (upload, replace, delete) and `/admin/usage`
   (questions, unanswered, "not helpful", privacy blocks and estimated cost, last 30 days).
 

@@ -19,6 +19,7 @@ import { detectIdentifiers, type PrivacyReason } from "@/lib/privacy";
 import { t } from "@/i18n";
 import { describeError } from "@/lib/errors";
 import { replaceSections } from "@/lib/knowledge";
+import { ANSWER_STYLE_MAX } from "@/lib/settings";
 
 type Purpose = "procedure" | "price_list";
 
@@ -306,4 +307,32 @@ export async function dismissReview(messageId: string): Promise<boolean> {
     returning id`;
   revalidatePath("/admin/usage");
   return rows.length === 1;
+}
+
+// Answer style ---------------------------------------------------------------------------
+
+export type StyleResult = { ok: true } | { ok: false; error: "tooLong" | "failed" } | { ok: false; error: "pii"; reasons: PrivacyReason[] };
+
+/** Saves the admin's answer-style instructions; an empty text removes them. */
+export async function saveAnswerStyle(value: string): Promise<StyleResult> {
+  const user = await requireAdmin();
+  const style = value.replace(/\r\n/g, "\n").trim();
+  if (style.length > ANSWER_STYLE_MAX) return { ok: false, error: "tooLong" };
+  const reasons = detectIdentifiers(style);
+  if (reasons.length) return { ok: false, error: "pii", reasons };
+  try {
+    if (style) {
+      await db()`
+        insert into chatbot.settings (key, value, updated_by)
+        values ('answer_style', ${style}, ${user.email})
+        on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now()`;
+    } else {
+      await db()`delete from chatbot.settings where key = 'answer_style'`;
+    }
+  } catch (error) {
+    console.error(`save answer style failed: ${describeError(error)}`);
+    return { ok: false, error: "failed" };
+  }
+  revalidatePath("/admin/style");
+  return { ok: true };
 }

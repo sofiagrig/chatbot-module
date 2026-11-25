@@ -25,6 +25,9 @@ export function AppShell({ user, children }: { user: User; children: React.React
                 <Link href="/admin/usage" className={link}>
                   {t("nav.usage")}
                 </Link>
+                <Link href="/admin/style" className={link}>
+                  {t("nav.style")}
+                </Link>
               </>
             )}
           </nav>
